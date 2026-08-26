@@ -1,4 +1,4 @@
-const VERSION = "corfu-gps-app-v2";
+const VERSION = "corfu-gps-app-v3";
 const TILE_CACHE = "corfu-gps-tiles";
 
 const APP_SHELL = [
@@ -21,6 +21,7 @@ const APP_SHELL = [
   "routes/dzien4_pantokrator.gpx",
   "routes/dzien5_wschodnie_wybrzeze.gpx",
   "routes/dzien6_korfu_town_poludnie.gpx",
+  "routes/test_olsztyn_petla.gpx",
 ];
 
 self.addEventListener("install", (e) => {

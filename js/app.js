@@ -9,6 +9,7 @@
     "dzien4_pantokrator.gpx",
     "dzien5_wschodnie_wybrzeze.gpx",
     "dzien6_korfu_town_poludnie.gpx",
+    "test_olsztyn_petla.gpx",
   ];
 
   const DIACRITICS = {
@@ -49,6 +50,8 @@
 
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
 
+  window.__map = map; // uchwyt do debugowania
+
   const routeLayer = L.layerGroup().addTo(map);
   const recLine = L.polyline([], { color: "#4ade80", weight: 5, opacity: 0.9 }).addTo(map);
 
@@ -77,7 +80,8 @@
         const res = await fetch("routes/" + file);
         const text = await res.text();
         const g = GPX.parse(text);
-        const track = g.track;
+        // uproszczenie geometrii (iOS Safari nie renderuje bardzo dlugich linii SVG)
+        const track = GPX.simplify(g.track, 0.0001);
         const cum = GPX.cumulative(track);
         const length = cum[cum.length - 1] || 0;
         const wpts = g.waypoints.map((w, wi) => {
@@ -101,7 +105,7 @@
           }
           return { ...w, idx: best, along: cum[best] };
         });
-        const day = parseInt(file.replace(/\D/g, ""), 10) || 0;
+        const day = parseInt(file.replace(/\D/g, ""), 10) || 999;
         out.push({
           file,
           day,

@@ -604,9 +604,23 @@
   }
 
   // ---------------- start ----------------
+  async function showVersion() {
+    try {
+      const t = await (await fetch("sw.js")).text();
+      const m = t.match(/VERSION = "([^"]+)"/);
+      if (m) $("app-version").textContent = m[1];
+    } catch {
+      /* offline przed pierwszym cachowaniem - zostaje '...' */
+    }
+  }
+
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW:", e));
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      setTimeout(showVersion, 300);
+    });
   }
+  showVersion();
   if (localStorage.getItem("corfu-wakelock") === "1") wlToggle.classList.add("on");
 
   loadRoutes();

@@ -1,0 +1,4 @@
+# pliki pomocnicze / testy (nie wgrywane na hosting)
+build/
+__pycache__/
+*.pyc

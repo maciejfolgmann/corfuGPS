@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#12344d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Korfu GPS">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Korfu GPS</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="topbar">
+  <div id="app-title">Korfu <b>GPS</b> <span id="offline-badge">offline</span></div>
+  <button id="btn-routes" class="btn" aria-label="Trasy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+  </button>
+  <button id="btn-settings" class="btn" aria-label="Ustawienia">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+  </button>
+</div>
+
+<div id="route-bar" hidden>
+  <div id="route-info">
+    <div id="route-name"></div>
+    <div id="route-meta"></div>
+  </div>
+  <div id="route-progress"><div id="route-progress-fill"></div></div>
+  <button id="btn-close-route" aria-label="Zamknij trasę">✕</button>
+</div>
+
+<div id="hud">
+  <div>
+    <div id="hud-speed"><span id="speed">--</span><small>km/h</small></div>
+    <div id="hud-stats">
+      <span><b id="hud-dist">0,0</b> km</span>
+      <span><b id="hud-alt">--</b> m npm</span>
+      <span id="rec-badge"></span>
+    </div>
+  </div>
+  <div id="hud-right">
+    <div id="hud-next-label">następny punkt</div>
+    <div id="hud-next-name">—</div>
+    <div id="hud-next-dist">—</div>
+  </div>
+</div>
+
+<div id="actions">
+  <button id="btn-record" class="btn" aria-label="Nagrywanie">
+    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+  </button>
+  <button id="btn-compass" class="btn" aria-label="Kompas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button id="btn-follow" class="btn active" aria-label="Podążaj za mną">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+  </button>
+  <button id="btn-zoom-in" class="btn" aria-label="Przybliż">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button id="btn-zoom-out" class="btn" aria-label="Oddal">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+  </button>
+</div>
+
+<div id="attribution">© OpenStreetMap</div>
+
+<div id="drawer-routes" class="drawer">
+  <div class="drawer-head">Trasy na Korfu <span class="spacer"></span><button class="drawer-close">✕</button></div>
+  <div class="drawer-scroll" id="routes-list"></div>
+</div>
+
+<div id="drawer-settings" class="drawer">
+  <div class="drawer-head">Ustawienia <span class="spacer"></span><button class="drawer-close">✕</button></div>
+  <div class="drawer-scroll">
+
+    <div id="install-hint" class="setting-row" style="display:none">
+      <div class="lbl">Zainstaluj apkę<small>Udostępnij (kwadrat ze strzałką) → „Dodaj do ekranu głównego”. Potem działa jak normalna apka, też bez internetu.</small></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Mapa offline</div>
+      <div class="setting-row">
+        <div class="lbl">Zakres zoomów<small>zielone = pobrane</small></div>
+        <div id="zoom-chips"></div>
+      </div>
+      <button id="dl-base" class="action-btn primary">Pobierz paczkę bazową</button>
+      <div class="progress-track"><div id="bar-base" class="progress-fill"></div></div>
+      <div class="dl-status" id="status-base"></div>
+      <button id="dl-detail" class="action-btn">Pobierz paczkę szczegółową</button>
+      <div class="progress-track"><div id="bar-detail" class="progress-fill"></div></div>
+      <div class="dl-status" id="status-detail"></div>
+      <button id="clear-map" class="action-btn danger">Wyczyść mapę offline</button>
+      <div class="dl-status">Wyższe zoomy (16–19) zapamiętują się same, gdy oglądasz je z internetem. Pobierz mapę raz na wifi, zanim wyruszysz.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Jazda</div>
+      <div class="setting-row">
+        <div class="lbl">Ekran bez wygaszania</div>
+        <button id="wl-toggle" class="tbtn">Wył.</button>
+      </div>
+      <div class="setting-row">
+        <div class="lbl">Kompas<small>przycisk na mapie; kierunek strzałki</small></div>
+        <span id="compass-readout">—</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Nagrania przejazdów</div>
+      <div id="recordings-list"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">O apce</div>
+      <div class="dl-status">Korfu GPS — nawigacja offline na skuter. Trasy: 6 dni po wyspie, start z Benitses. Mapa: © OpenStreetMap (licencja ODbL). GPS działa też bez zasięgu.</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="leaflet/leaflet.js"></script>
+<script src="js/gpx.js"></script>
+<script src="js/map-download.js"></script>
+<script src="js/recording.js"></script>
+<script src="js/compass.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
-const VERSION = "corfu-gps-v1";
+const VERSION = "corfu-gps-app-v2";
+const TILE_CACHE = "corfu-gps-tiles";
 
 const APP_SHELL = [
-  "./",
   "index.html",
   "manifest.webmanifest",
   "css/style.css",
@@ -36,7 +36,13 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k !== VERSION && k !== TILE_CACHE && k !== "corfu-gps-v1")
+            .map((k) => caches.delete(k))
+        )
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -45,8 +51,14 @@ function isTile(url) {
   return url.hostname.endsWith("tile.openstreetmap.org");
 }
 
+// apka moze byc serwowana z podsciezki (np. /corfuGPS/) - porownuj koncowke sciezki
+function isShellPath(url) {
+  const rel = url.pathname.replace(/^\//, "");
+  return APP_SHELL.some((p) => rel === p || rel.endsWith("/" + p));
+}
+
 async function tileStrategy(req) {
-  const cache = await caches.open(VERSION);
+  const cache = await caches.open(TILE_CACHE);
   const hit = await cache.match(req);
   if (hit) return hit;
   try {
@@ -91,8 +103,7 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(navStrategy(e.request));
     return;
   }
-  const rel = url.pathname.replace(/^\//, "");
-  if (APP_SHELL.includes(rel)) {
+  if (isShellPath(url)) {
     e.respondWith(cacheFirst(e.request));
   }
 });

@@ -122,7 +122,7 @@ const MapDownload = (() => {
 
   async function clearAll() {
     if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
-    const cache = await caches.open("corfu-gps-v1");
+    const cache = await caches.open("corfu-gps-tiles");
     const keys = await cache.keys();
     let removed = 0;
     for (const k of keys) {

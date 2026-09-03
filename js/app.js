@@ -44,6 +44,11 @@
     routeFinished: false,
     routeMaxAlong: 0,
     recBadgeTimer: null,
+    pickDest: false,
+    dest: null,
+    destName: "",
+    destArrived: false,
+    routeDir: 1,
   };
 
   // ---------------- mapa ----------------
@@ -58,6 +63,22 @@
 
   const routeLayer = L.layerGroup().addTo(map);
   const recLine = L.polyline([], { color: "#4ade80", weight: 5, opacity: 0.9 }).addTo(map);
+  const destLine = L.polyline([], {
+    color: "#ffc233",
+    weight: 3,
+    dashArray: "8 10",
+    opacity: 0.95,
+    interactive: false,
+  });
+  const destMarker = L.marker([0, 0], {
+    icon: L.divIcon({
+      className: "dest-wrap",
+      html: '<div class="dest-pin"></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    }),
+    zIndexOffset: 900,
+  });
 
   const arrow = L.marker([0, 0], {
     icon: L.divIcon({ className: "pos-wrap", html: '<div class="pos-arrow"></div>', iconSize: [44, 44], iconAnchor: [22, 22] }),
@@ -68,6 +89,14 @@
   map.on("dragstart", () => {
     state.follow = false;
     updateFollowBtn();
+  });
+  map.on("click", (e) => {
+    if (!state.pickDest) return;
+    setDest([e.latlng.lat, e.latlng.lng]);
+  });
+  map.on("contextmenu", (e) => {
+    if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent);
+    setDest([e.latlng.lat, e.latlng.lng]);
   });
 
   // ---------------- trasy ----------------
@@ -171,6 +200,10 @@
 
     const bounds = L.latLngBounds(r.track);
     if (state.pos) bounds.extend(state.pos);
+    if (state.dest && state.pos) {
+      const destIdx = nearestIdx(r.track, state.dest, 0, true);
+      state.routeDir = chooseRouteDir(r, routeAlong(r, state.pos), r.cum[destIdx]);
+    }
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     updateProgress();
   }
@@ -184,15 +217,18 @@
     state.active = null;
     $("route-bar").hidden = true;
     $("route-progress-fill").style.width = "0%";
-    $("hud-next-name").textContent = "—";
-    $("hud-next-dist").textContent = "—";
+    if (!updateDestHud()) {
+      $("hud-next-label").textContent = "następny punkt";
+      $("hud-next-name").textContent = "—";
+      $("hud-next-dist").textContent = "—";
+    }
   }
 
   // ---------------- nawigacja ----------------
-  function nearestIdx(track, pos, hint) {
+  function nearestIdx(track, pos, hint, forceFull) {
     const n = track.length;
     state.fullScanCount++;
-    const fullScan = state.fullScanCount % 25 === 0;
+    const fullScan = forceFull || state.fullScanCount % 25 === 0;
     let best = Math.max(0, Math.min(n - 1, hint || 0));
     let bestD = Infinity;
     const W = 4000;
@@ -222,31 +258,152 @@
     return along;
   }
 
+  function loopDist(from, to, length, dir) {
+    if (length <= 0) return 0;
+    if (dir === 1) {
+      let d = to - from;
+      if (d < 0) d += length;
+      return d;
+    }
+    let d = from - to;
+    if (d < 0) d += length;
+    return d;
+  }
+
+  function chooseRouteDir(r, along, destAlong) {
+    const fwd = loopDist(along, destAlong, r.length, 1);
+    const back = loopDist(along, destAlong, r.length, -1);
+    return fwd <= back ? 1 : -1;
+  }
+
+  function nextWaypoint(r, along, dir) {
+    if (dir === 1) {
+      for (const w of r.wpts) {
+        if (w.along > along + 0.03) return w;
+      }
+      return null;
+    }
+    for (let i = r.wpts.length - 1; i >= 0; i--) {
+      if (r.wpts[i].along < along - 0.03) return r.wpts[i];
+    }
+    return null;
+  }
+
+  function destLabel(ll) {
+    if (state.active) {
+      let best = null;
+      let bestD = 0.25;
+      for (const w of state.active.wpts) {
+        const d = GPX.haversine(ll, [w.lat, w.lon]);
+        if (d < bestD) {
+          bestD = d;
+          best = w.name;
+        }
+      }
+      if (best) return best;
+    }
+    return "Zaznaczony punkt";
+  }
+
+  function syncDestBtn() {
+    const btn = $("btn-dest");
+    btn.classList.toggle("picking", state.pickDest);
+    btn.classList.toggle("active", !!state.dest && !state.pickDest);
+  }
+
+  function clearDest() {
+    state.dest = null;
+    state.destName = "";
+    state.destArrived = false;
+    state.pickDest = false;
+    state.routeDir = 1;
+    if (destMarker._map) destMarker.remove();
+    if (destLine._map) destLine.remove();
+    document.body.classList.remove("picking-dest");
+    syncDestBtn();
+    if (state.active && state.pos) updateProgress();
+    else {
+      $("hud-next-label").textContent = "następny punkt";
+      $("hud-next-name").textContent = "—";
+      $("hud-next-dist").textContent = "—";
+    }
+  }
+
+  function updateDestHud() {
+    if (!state.dest) return false;
+    $("hud-next-label").textContent = "cel na mapie";
+    $("hud-next-name").textContent = state.destName || "Zaznaczony punkt";
+    if (state.pos) {
+      const km = GPX.haversine(state.pos, state.dest);
+      $("hud-next-dist").textContent = "do celu: " + fmtDist(km * 1000);
+      destLine.setLatLngs([state.pos, state.dest]);
+      if (!destLine._map) destLine.addTo(map);
+      if (km < 0.04 && !state.destArrived) {
+        state.destArrived = true;
+        toast("Jesteś przy celu");
+      }
+    } else {
+      $("hud-next-dist").textContent = "czekam na GPS";
+    }
+    return true;
+  }
+
+  function setDest(ll) {
+    state.dest = ll;
+    state.destName = destLabel(ll);
+    state.destArrived = false;
+    state.pickDest = false;
+    document.body.classList.remove("picking-dest");
+    destMarker.setLatLng(ll);
+    if (!destMarker._map) destMarker.addTo(map);
+    destMarker.bindPopup("<b>Cel</b><br>" + escHtml(state.destName));
+    syncDestBtn();
+
+    if (state.active && state.pos) {
+      const along = routeAlong(state.active, state.pos);
+      const destIdx = nearestIdx(state.active.track, ll, 0, true);
+      const destAlong = state.active.cum[destIdx];
+      state.routeDir = chooseRouteDir(state.active, along, destAlong);
+      const alongKm = loopDist(along, destAlong, state.active.length, state.routeDir);
+      toast(
+        (state.routeDir === 1 ? "Zgodnie z trasą" : "Pod prąd trasy") +
+          " • " +
+          fmtDist(alongKm * 1000)
+      );
+      updateProgress();
+    } else {
+      toast("Cel: " + state.destName);
+      updateDestHud();
+    }
+  }
+
   function updateProgress() {
     const r = state.active;
-    if (!r || !state.pos) return;
+    if (!r || !state.pos) {
+      updateDestHud();
+      return;
+    }
     const along = routeAlong(r, state.pos);
     const pct = Math.min(100, (along / r.length) * 100);
     $("route-progress-fill").style.width = pct + "%";
 
-    let next = null;
-    for (const w of r.wpts) {
-      if (w.along > along + 0.03) {
-        next = w;
-        break;
+    const next = nextWaypoint(r, along, state.routeDir);
+
+    if (!updateDestHud()) {
+      if (!next) {
+        $("hud-next-label").textContent = "następny punkt";
+        $("hud-next-name").textContent = "Koniec trasy";
+        $("hud-next-dist").textContent = "";
+        if (!state.routeFinished && along > r.length - 0.15 && state.routeDir === 1) {
+          state.routeFinished = true;
+          toast("Koniec trasy — " + r.name.split(" — ")[0]);
+        }
+      } else {
+        const rem = loopDist(along, next.along, r.length, state.routeDir) * 1000;
+        $("hud-next-label").textContent = "następny punkt";
+        $("hud-next-name").textContent = next.name;
+        $("hud-next-dist").textContent = "do celu: " + fmtDist(rem);
       }
-    }
-    if (!next) {
-      $("hud-next-name").textContent = "Koniec trasy";
-      $("hud-next-dist").textContent = "";
-      if (!state.routeFinished && along > r.length - 0.15) {
-        state.routeFinished = true;
-        toast("Koniec trasy — " + r.name.split(" — ")[0]);
-      }
-    } else {
-      const rem = (next.along - along) * 1000;
-      $("hud-next-name").textContent = next.name;
-      $("hud-next-dist").textContent = "do celu: " + fmtDist(rem);
     }
 
     if (r.markers) {
@@ -256,7 +413,9 @@
         if (!el) return;
         const pin = el.querySelector(".wpt-pin");
         if (!pin) return;
-        pin.classList.toggle("done", w.along < along - 0.03);
+        const passed =
+          state.routeDir === 1 ? w.along < along - 0.03 : w.along > along + 0.03;
+        pin.classList.toggle("done", passed);
         pin.classList.toggle("next", next === w);
       });
     }
@@ -304,6 +463,7 @@
     if (state.follow) map.panTo(pos, { animate: false });
 
     if (state.active) updateProgress();
+    else updateDestHud();
     if (Recording.getState() === "recording") Recording.addPoint(pos, p.timestamp);
 
     state.lastFix = pos;
@@ -533,6 +693,24 @@
     state.follow = true;
     updateFollowBtn();
     if (state.pos) map.panTo(state.pos, { animate: true });
+  });
+  $("btn-dest").addEventListener("click", () => {
+    if (state.pickDest) {
+      state.pickDest = false;
+      document.body.classList.remove("picking-dest");
+      syncDestBtn();
+      toast("Anulowano");
+      return;
+    }
+    if (state.dest) {
+      clearDest();
+      toast("Cel usunięty");
+      return;
+    }
+    state.pickDest = true;
+    document.body.classList.add("picking-dest");
+    syncDestBtn();
+    toast("Dotknij mapę — tam będzie kierunek");
   });
   $("btn-zoom-in").addEventListener("click", () => map.zoomIn());
   $("btn-zoom-out").addEventListener("click", () => map.zoomOut());

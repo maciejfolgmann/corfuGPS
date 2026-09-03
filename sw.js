@@ -1,4 +1,4 @@
-const VERSION = "corfu-gps-app-v5";
+const VERSION = "corfu-gps-app-v6";
 const TILE_CACHE = "corfu-gps-tiles";
 
 const APP_SHELL = [

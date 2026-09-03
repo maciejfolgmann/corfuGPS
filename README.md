@@ -42,6 +42,7 @@ Gotowe — apka działa **bez zasięgu**: mapa, trasy, GPS, nawigacja, nagrywani
 | Podążanie za sobą | Przycisk celownika (🎯) — mapa sama się centruje. Przeciągnięcie mapy wyłącza |
 | Kompas | Przycisk kompasu — strzałka pokazuje kierunek zamiast kursu GPS |
 | Nagrywanie | Krótkie kliknięcie ● — start / pauza / wznów. **Przytrzymaj ●**, żeby zakończyć i zapisać. Albo Ustawienia → „Zakończ i zapisz". Niedokończony przejazd wraca po restarcie apki. Eksport GPX w Ustawieniach |
+| Cel na mapie | Przycisk pinezki → dotknij mapę. Żółta linia i HUD prowadzą do tego punktu. Na pętli trasy wybiera krótszy kierunek. Ponowne kliknięcie pinezki kasuje cel. Przytrzymanie na mapie też stawia cel |
 | Zoom | Przyciski + / − po prawej |
 
 ## Gdyby coś nie działało

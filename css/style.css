@@ -91,6 +91,7 @@ body { height: 100dvh; overscroll-behavior: none; touch-action: manipulation; us
 .btn:active { transform: scale(0.92); }
 .btn.active { background: var(--accent); color: #0d2233; }
 .btn.danger { background: var(--record); color: #fff; }
+.btn.picking { background: var(--warn); color: #0d2233; }
 
 /* ---- pasek trasy ---- */
 #route-bar {
@@ -242,6 +243,18 @@ body { height: 100dvh; overscroll-behavior: none; touch-action: manipulation; us
 }
 .wpt-pin.done { border-color: var(--ok); background: rgba(74, 222, 128, 0.25); }
 .wpt-pin.next { background: var(--route); transform: scale(1.25); }
+
+.dest-wrap { background: transparent; border: none; }
+.dest-pin {
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  background: var(--warn);
+  border: 3px solid #0d2233;
+  box-shadow: 0 0 0 2px var(--warn), 0 2px 8px rgba(0,0,0,0.45);
+}
+body.picking-dest #map { cursor: crosshair; }
 
 .leaflet-popup-content-wrapper { background: var(--surface-solid); color: var(--text); border-radius: 12px; }
 .leaflet-popup-tip { background: var(--surface-solid); }
@@ -448,6 +461,10 @@ body { height: 100dvh; overscroll-behavior: none; touch-action: manipulation; us
 }
 #toast.show { opacity: 1; }
 
+@media (max-height: 700px) {
+  #actions { gap: 6px; }
+  .btn { width: 48px; height: 48px; }
+}
 @media (max-height: 620px) {
   #speed { font-size: 40px; }
   #hud { padding: 10px 14px; }

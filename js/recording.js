@@ -1,6 +1,7 @@
 const Recording = (() => {
   const KEY = "corfu-recordings";
   const PROGRESS_KEY = "corfu-rec-inprogress";
+  const MIN_POINT_M = 0.008; // ~8 m — mniej śmieci w localStorage
   let state = "idle"; // idle | recording | paused
   let points = [];
   let startTs = 0;
@@ -17,16 +18,66 @@ const Recording = (() => {
   }
 
   function save(list) {
-    localStorage.setItem(KEY, JSON.stringify(list));
+    const payload = JSON.stringify(list);
+    try {
+      localStorage.setItem(KEY, payload);
+      return true;
+    } catch {
+      // quota — obetnij stare nagrania
+      try {
+        localStorage.setItem(KEY, JSON.stringify(list.slice(0, 8)));
+        return true;
+      } catch {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(list.slice(0, 3).map(thinRec)));
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    }
   }
 
-  function notify() {
-    if (onChange) onChange({ state, pts: points, elapsed: getElapsed(), dist: distance() });
+  function thinRec(rec) {
+    if (!rec.points || rec.points.length < 4) return rec;
+    const step = Math.ceil(rec.points.length / 800);
+    return { ...rec, points: rec.points.filter((_, i) => i % step === 0 || i === rec.points.length - 1) };
+  }
+
+  function persistProgress() {
+    if (state === "idle") return;
+    try {
+      localStorage.setItem(
+        PROGRESS_KEY,
+        JSON.stringify({
+          points,
+          startTs,
+          elapsed: getElapsed(),
+          state,
+        })
+      );
+    } catch {
+      /* quota — szkic może nie wejść, nagranie i tak leci w RAM */
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") persistProgress();
+  });
+  window.addEventListener("pagehide", persistProgress);
+
+  function notify(reason) {
+    if (onChange) onChange({ state, pts: points, elapsed: getElapsed(), dist: distance(), reason: reason || "update" });
   }
 
   function getElapsed() {
     if (state === "recording") return elapsed + (Date.now() - startTs) / 1000;
     return elapsed;
+  }
+
+  function armAutoSave() {
+    clearInterval(autoSaveTimer);
+    autoSaveTimer = setInterval(persistProgress, 15000);
   }
 
   function start() {
@@ -35,19 +86,19 @@ const Recording = (() => {
     points = [];
     startTs = Date.now();
     elapsed = 0;
-    autoSaveTimer = setInterval(() => {
-      localStorage.setItem(
-        PROGRESS_KEY,
-        JSON.stringify({ points, startTs, elapsed: (Date.now() - startTs) / 1000 })
-      );
-    }, 15000);
-    notify();
+    armAutoSave();
+    persistProgress();
+    notify("start");
   }
 
   function addPoint(latLng, ts) {
     if (state !== "recording") return;
+    if (points.length) {
+      const last = points[points.length - 1];
+      if (GPX.haversine([last.lat, last.lon], latLng) < MIN_POINT_M) return;
+    }
     points.push({ lat: latLng[0], lon: latLng[1], t: ts });
-    notify();
+    notify("point");
   }
 
   function pause() {
@@ -55,20 +106,17 @@ const Recording = (() => {
     elapsed += (Date.now() - startTs) / 1000;
     state = "paused";
     clearInterval(autoSaveTimer);
-    notify();
+    persistProgress();
+    notify("pause");
   }
 
   function resume() {
     if (state !== "paused") return;
     startTs = Date.now();
     state = "recording";
-    autoSaveTimer = setInterval(() => {
-      localStorage.setItem(
-        PROGRESS_KEY,
-        JSON.stringify({ points, startTs, elapsed: (Date.now() - startTs) / 1000 })
-      );
-    }, 15000);
-    notify();
+    armAutoSave();
+    persistProgress();
+    notify("resume");
   }
 
   function stop() {
@@ -89,11 +137,30 @@ const Recording = (() => {
     };
     const list = load();
     list.unshift(rec);
-    save(list.slice(0, 50));
+    const ok = save(list.slice(0, 50));
+    rec.saved = ok;
     const out = rec;
     points = [];
-    notify();
+    notify("stop");
     return out;
+  }
+
+  function restore() {
+    if (state !== "idle") return false;
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.points) || data.points.length === 0) return false;
+      points = data.points;
+      elapsed = Number(data.elapsed) || 0;
+      startTs = Date.now();
+      state = "paused";
+      notify("restore");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function distance() {
@@ -110,6 +177,7 @@ const Recording = (() => {
 
   function remove(id) {
     save(load().filter((r) => r.id !== id));
+    notify("remove");
   }
 
   function fmtDate(d) {
@@ -117,12 +185,20 @@ const Recording = (() => {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
+  function xmlEsc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function exportGpx(rec) {
     const header =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<gpx version="1.1" creator="Korfu GPS" xmlns="http://www.topografix.com/GPX/1/1">\n' +
-      `  <metadata><name>${rec.name}</name><desc>dystans ${rec.dist.toFixed(2)} km, czas ${fmtDur(rec.sec)}</desc></metadata>\n` +
-      `  <trk><name>${rec.name}</name><trkseg>\n`;
+      `  <metadata><name>${xmlEsc(rec.name)}</name><desc>dystans ${rec.dist.toFixed(2)} km, czas ${fmtDur(rec.sec)}</desc></metadata>\n` +
+      `  <trk><name>${xmlEsc(rec.name)}</name><trkseg>\n`;
     const body = rec.points
       .map((p) => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><time>${new Date(p.t).toISOString()}</time></trkpt>`)
       .join("\n");
@@ -156,6 +232,7 @@ const Recording = (() => {
     pause,
     resume,
     stop,
+    restore,
     addPoint,
     list,
     remove,

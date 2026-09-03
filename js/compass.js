@@ -3,6 +3,7 @@ const Compass = (() => {
   let enabled = false;
   let permission = "unknown";
   let listeners = [];
+  let listening = false;
 
   async function requestPermission() {
     if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -14,8 +15,9 @@ const Compass = (() => {
     } else {
       permission = "granted";
     }
-    if (permission === "granted") {
+    if (permission === "granted" && !listening) {
       window.addEventListener("deviceorientation", onOrientation);
+      listening = true;
     }
     return permission;
   }

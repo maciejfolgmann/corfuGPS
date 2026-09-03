@@ -1,4 +1,4 @@
-const VERSION = "corfu-gps-app-v4";
+const VERSION = "corfu-gps-app-v5";
 const TILE_CACHE = "corfu-gps-tiles";
 
 const APP_SHELL = [
@@ -40,7 +40,7 @@ self.addEventListener("activate", (e) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k !== VERSION && k !== TILE_CACHE && k !== "corfu-gps-v1")
+            .filter((k) => k !== VERSION && k !== TILE_CACHE)
             .map((k) => caches.delete(k))
         )
       )

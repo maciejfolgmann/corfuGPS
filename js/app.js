@@ -2,6 +2,12 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  const escHtml = (s) =>
+    String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   const ROUTE_FILES = [
     "dzien1_poludnie_pelekas.gpx",
     "dzien2_zachodnie_wybrzeze.gpx",
@@ -49,8 +55,6 @@
   }).setView([39.62, 19.9], 12);
 
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-
-  window.__map = map; // uchwyt do debugowania
 
   const routeLayer = L.layerGroup().addTo(map);
   const recLine = L.polyline([], { color: "#4ade80", weight: 5, opacity: 0.9 }).addTo(map);
@@ -123,6 +127,7 @@
     }
     out.sort((a, b) => a.day - b.day);
     state.routes = out;
+    if (!out.length) toast("Nie udało się wczytać tras — odśwież apkę na wifi");
     renderRouteList();
     const saved = localStorage.getItem("corfu-active-route");
     const savedRoute = out.find((r) => r.file === saved);
@@ -154,7 +159,7 @@
           iconAnchor: [15, 15],
         }),
       });
-      m.bindPopup(`<b>${w.name}</b>${w.desc ? "<br>" + w.desc : ""}`);
+      m.bindPopup(`<b>${escHtml(w.name)}</b>${w.desc ? "<br>" + escHtml(w.desc) : ""}`);
       routeLayer.addLayer(m);
       return m;
     });
@@ -356,13 +361,23 @@
       badge.textContent = "● " + fmtTime();
       $("btn-record").classList.add("danger");
     } else if (s.state === "paused") {
+      badge.classList.add("on");
       badge.textContent = "⏸ " + fmtTime();
+      $("btn-record").classList.add("danger");
+      if (state.recBadgeTimer) {
+        clearInterval(state.recBadgeTimer);
+        state.recBadgeTimer = null;
+      }
     } else {
       badge.classList.remove("on");
       $("btn-record").classList.remove("danger");
+      if (state.recBadgeTimer) {
+        clearInterval(state.recBadgeTimer);
+        state.recBadgeTimer = null;
+      }
     }
     recLine.setLatLngs((Recording.getPoints() || []).map((pt) => [pt.lat, pt.lon]));
-    renderRecordings();
+    if (s.reason !== "point") renderRecordings();
   });
 
   function fmtTime() {
@@ -415,6 +430,7 @@
   }
 
   function renderSettings() {
+    MapDownload.verifyCachedZooms().then(() => renderMapSection());
     renderMapSection();
     renderRecordings();
     const offline = !(window.navigator.standalone || matchMedia("(display-mode: standalone)").matches);
@@ -425,14 +441,14 @@
 
   // ---------------- mapa offline ----------------
   const PACK_INFO = {
-    base: { tiles: 1030, label: "Paczka bazowa", desc: "cała wyspa, drogi lokalne (zoom 10–14)", approx: "~60 MB" },
-    detail: { tiles: 3970, label: "Paczka szczegółowa", desc: "+ serwisówki, ścieżki i budynki (zoom 15)", approx: "~220 MB" },
+    base: { tiles: 3970, label: "Cała mapa Korfu", desc: "cała wyspa: drogi, ścieżki, miejscowości (zoom 10–15)", approx: "~100 MB" },
+    detail: { tiles: 11760, label: "Bliższy zoom", desc: "ulice i zabudowa z bliska (zoom 16, cała wyspa)", approx: "~200 MB extra" },
   };
 
   function renderMapSection() {
     const chips = $("zoom-chips");
     chips.innerHTML = "";
-    for (let z = 10; z <= 15; z++) {
+    for (let z = 10; z <= 16; z++) {
       const c = document.createElement("span");
       c.className = "chip";
       c.textContent = "z" + z;
@@ -443,7 +459,7 @@
       const bar = $("bar-" + key);
       const status = $("status-" + key);
       const btn = $("dl-" + key);
-      const ok = MapDownload.isZoomCached(key === "base" ? 14 : 15);
+      const ok = MapDownload.isZoomCached(key === "base" ? 15 : 16);
       if (ok) {
         btn.textContent = "Pobrano ✓";
         btn.disabled = true;
@@ -482,6 +498,7 @@
   $("dl-base").addEventListener("click", () => startDownload("base"));
   $("dl-detail").addEventListener("click", () => startDownload("detail"));
   $("clear-map").addEventListener("click", async () => {
+    if (!confirm("Skasować pobraną mapę offline?")) return;
     const n = await MapDownload.clearAll();
     toast("Wyczyszczono mapę offline (" + n + " kafelków)");
     renderSettings();
@@ -519,10 +536,44 @@
   });
   $("btn-zoom-in").addEventListener("click", () => map.zoomIn());
   $("btn-zoom-out").addEventListener("click", () => map.zoomOut());
-  $("btn-record").addEventListener("click", () => {
+
+  function stopRecording() {
+    const rec = Recording.stop();
+    if (!rec) return;
+    if (rec.saved === false) toast("Pamięć pełna — eksportuj GPX od razu z Ustawień");
+    else toast("Zapisano przejazd (" + rec.dist.toFixed(1) + " km)");
+  }
+
+  const recBtn = $("btn-record");
+  let recHoldTimer = null;
+  let recHoldFired = false;
+  function clearRecHold() {
+    clearTimeout(recHoldTimer);
+    recHoldTimer = null;
+  }
+  recBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+  recBtn.addEventListener("pointerdown", () => {
+    recHoldFired = false;
+    if (Recording.getState() === "idle") return;
+    recHoldTimer = setTimeout(() => {
+      recHoldFired = true;
+      stopRecording();
+    }, 650);
+  });
+  recBtn.addEventListener("pointerup", clearRecHold);
+  recBtn.addEventListener("pointerleave", clearRecHold);
+  recBtn.addEventListener("pointercancel", clearRecHold);
+  recBtn.addEventListener("click", (e) => {
+    if (recHoldFired) {
+      recHoldFired = false;
+      e.preventDefault();
+      return;
+    }
     const s = Recording.getState();
-    if (s === "idle") Recording.start();
-    else if (s === "recording") Recording.pause();
+    if (s === "idle") {
+      Recording.start();
+      toast("Nagrywanie — przytrzymaj ● żeby zapisać");
+    } else if (s === "recording") Recording.pause();
     else Recording.resume();
   });
   $("btn-close-route").addEventListener("click", () => {
@@ -532,17 +583,33 @@
 
   // ---------------- wake lock ----------------
   const wlToggle = $("wl-toggle");
+  function syncWakeLockBtn() {
+    wlToggle.textContent = wlToggle.classList.contains("on") ? "Wł." : "Wył.";
+  }
   wlToggle.addEventListener("click", async () => {
     const on = wlToggle.classList.toggle("on");
     localStorage.setItem("corfu-wakelock", on ? "1" : "0");
+    syncWakeLockBtn();
     if (on) await acquireWakeLock();
+    else await releaseWakeLock();
   });
   async function acquireWakeLock() {
     try {
-      if ("wakeLock" in navigator) state.wl = await navigator.wakeLock.request("screen");
+      if ("wakeLock" in navigator) {
+        await releaseWakeLock();
+        state.wl = await navigator.wakeLock.request("screen");
+      }
     } catch {
-      /* ignoruj */
+      /* iOS / brak wsparcia */
     }
+  }
+  async function releaseWakeLock() {
+    try {
+      if (state.wl) await state.wl.release();
+    } catch {
+      /* już zwolniony */
+    }
+    state.wl = null;
   }
   document.addEventListener("visibilitychange", async () => {
     if (
@@ -569,9 +636,23 @@
   function renderRecordings() {
     const box = $("recordings-list");
     box.innerHTML = "";
+    const live = Recording.getState();
+    if (live !== "idle") {
+      const bar = document.createElement("div");
+      bar.className = "rec-item rec-live";
+      const p = document.createElement("p");
+      p.className = "rec-live-txt";
+      p.textContent = live === "paused" ? "Niedokończone nagranie (pauza)" : "Trwa nagrywanie";
+      const btn = document.createElement("button");
+      btn.className = "btn-exp";
+      btn.textContent = "Zakończ i zapisz";
+      btn.addEventListener("click", stopRecording);
+      bar.append(p, btn);
+      box.appendChild(bar);
+    }
     const recs = Recording.list();
-    if (recs.length === 0) {
-      box.innerHTML = '<div class="dl-status">Brak nagrań. Użyj czerwonego przycisku ●, żeby nagrać przejazd.</div>';
+    if (recs.length === 0 && live === "idle") {
+      box.innerHTML = '<div class="dl-status">Brak nagrań. Krótkie kliknięcie ● start/pauza, przytrzymanie — zapis.</div>';
       return;
     }
     for (const rec of recs) {
@@ -594,8 +675,8 @@
       del.className = "btn-del";
       del.textContent = "Usuń";
       del.addEventListener("click", () => {
+        if (!confirm("Usunąć to nagranie?")) return;
         Recording.remove(rec.id);
-        renderRecordings();
       });
       acts.append(exp, del);
       div.append(head, acts);
@@ -621,9 +702,14 @@
     });
   }
   showVersion();
-  if (localStorage.getItem("corfu-wakelock") === "1") wlToggle.classList.add("on");
+  if (localStorage.getItem("corfu-wakelock") === "1") {
+    wlToggle.classList.add("on");
+    acquireWakeLock();
+  }
+  syncWakeLockBtn();
 
   loadRoutes();
   startGps();
   updateFollowBtn();
+  if (Recording.restore()) toast("Niedokończone nagranie — wznów ● albo zakończ w Ustawieniach");
 })();

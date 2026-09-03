@@ -410,6 +410,19 @@ body { height: 100dvh; overscroll-behavior: none; touch-action: manipulation; us
 }
 .rec-item .btn-exp { background: var(--accent); color: #0d2233; }
 .rec-item .btn-del { background: rgba(255, 77, 109, 0.2); color: var(--record); }
+.rec-item.rec-live { border: 1px solid var(--record); }
+.rec-live-txt { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.rec-item.rec-live .btn-exp {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#btn-record { -webkit-touch-callout: none; }
 
 #compass-readout { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 

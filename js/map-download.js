@@ -1,9 +1,10 @@
 const MapDownload = (() => {
   const BBOX = { minLat: 39.335865, maxLat: 39.84154, minLon: 19.615067, maxLon: 20.1462 };
   const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const TILE_CACHE = "corfu-gps-tiles";
   const PACKS = {
-    base: { label: "Paczka bazowa", zooms: [10, 11, 12, 13, 14], approx: "~60 MB" },
-    detail: { label: "Paczka szczegółowa", zooms: [10, 11, 12, 13, 14, 15], approx: "~220 MB łącznie" },
+    base: { label: "Cała mapa Korfu", zooms: [10, 11, 12, 13, 14, 15], approx: "~100 MB" },
+    detail: { label: "Bliższy zoom", zooms: [16], approx: "~200 MB extra" },
   };
 
   let running = false;
@@ -39,6 +40,36 @@ const MapDownload = (() => {
     return localStorage.getItem(zoomFlag(z)) === "1";
   }
 
+  function tileUrlOf(u) {
+    // https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    const m = String(u).match(/tile\.openstreetmap\.org\/(\d+)\/(\d+)\/(\d+)/);
+    return m ? { z: +m[1], x: +m[2], y: +m[3] } : null;
+  }
+
+  async function verifyCachedZooms() {
+    if (typeof caches === "undefined") return;
+    try {
+      const cache = await caches.open(TILE_CACHE);
+      const keys = await cache.keys();
+      const byZoom = Object.create(null);
+      for (const k of keys) {
+        const t = tileUrlOf(k.url);
+        if (!t) continue;
+        byZoom[t.z] = (byZoom[t.z] || 0) + 1;
+      }
+      for (let z = 10; z <= 16; z++) {
+        if (localStorage.getItem(zoomFlag(z)) !== "1") continue;
+        const { x0, x1, y0, y1 } = tileRange(z);
+        const expected = (x1 - x0 + 1) * (y1 - y0 + 1);
+        const have = byZoom[z] || 0;
+        // iOS mógł wyrzucić cache — flaga kłamie
+        if (expected > 0 && have < expected * 0.7) localStorage.removeItem(zoomFlag(z));
+      }
+    } catch {
+      /* brak Cache API */
+    }
+  }
+
   function buildQueue(pack) {
     const q = [];
     for (const z of pack.zooms) {
@@ -66,6 +97,10 @@ const MapDownload = (() => {
     });
   }
 
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
   async function start(packName, progressCb, doneCb) {
     if (running) return;
     const pack = PACKS[packName];
@@ -88,7 +123,8 @@ const MapDownload = (() => {
       return;
     }
 
-    const workers = 6;
+    // 3 równoległe + mała pauza — mniej walimy w OSM niż 6 na raz
+    const workers = 3;
     let cursor = 0;
 
     async function worker() {
@@ -98,12 +134,12 @@ const MapDownload = (() => {
         if (ok) done++;
         else failed++;
         if (onProgress) onProgress({ total, done: done + failed, failed, zooms: pack.zooms });
+        if (cursor % 40 === 0) await sleep(40);
       }
     }
 
     await Promise.all(Array.from({ length: workers }, worker));
 
-    // zoom bez zadnego bledu = kompletny (kafelki z cache licza sie jako sukces)
     if (failed === 0) {
       for (const z of pack.zooms) {
         if (queue.some((t) => t.z === z)) localStorage.setItem(zoomFlag(z), "1");
@@ -121,17 +157,20 @@ const MapDownload = (() => {
   }
 
   async function clearAll() {
-    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
-    const cache = await caches.open("corfu-gps-tiles");
-    const keys = await cache.keys();
     let removed = 0;
-    for (const k of keys) {
-      if (k.url.includes("tile.openstreetmap.org")) {
-        await cache.delete(k);
-        removed++;
+    try {
+      const cache = await caches.open(TILE_CACHE);
+      const keys = await cache.keys();
+      for (const k of keys) {
+        if (k.url.includes("tile.openstreetmap.org")) {
+          await cache.delete(k);
+          removed++;
+        }
       }
+    } catch {
+      /* brak Cache API */
     }
-    for (let z = 10; z <= 16; z++) localStorage.removeItem(zoomFlag(z));
+    for (let z = 10; z <= 19; z++) localStorage.removeItem(zoomFlag(z));
     return removed;
   }
 
@@ -140,6 +179,7 @@ const MapDownload = (() => {
     cachedZoomCount,
     clearAll,
     isZoomCached,
+    verifyCachedZooms,
     isBusy: () => running,
     PACKS,
   };

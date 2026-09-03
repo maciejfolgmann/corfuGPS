@@ -5,22 +5,26 @@ const GPX = (() => {
     const doc = new DOMParser().parseFromString(text, "application/xml");
     if (doc.querySelector("parsererror")) throw new Error("Zły plik GPX");
     const get = (el, tag) => {
-      const n = el.getElementsByTagNameNS(NS, tag)[0];
+      if (!el) return "";
+      const n = el.getElementsByTagNameNS(NS, tag)[0] || el.getElementsByTagName(tag)[0];
       return n ? n.textContent.trim() : "";
     };
-    const wpts = Array.from(doc.getElementsByTagNameNS(NS, "wpt")).map((w) => ({
+    const byTag = (tag) => {
+      const ns = Array.from(doc.getElementsByTagNameNS(NS, tag));
+      return ns.length ? ns : Array.from(doc.getElementsByTagName(tag));
+    };
+    const wpts = byTag("wpt").map((w) => ({
       lat: parseFloat(w.getAttribute("lat")),
       lon: parseFloat(w.getAttribute("lon")),
       name: get(w, "name"),
       desc: get(w, "desc"),
     }));
-    const track = Array.from(doc.getElementsByTagNameNS(NS, "trkpt")).map((p) => [
+    const track = byTag("trkpt").map((p) => [
       parseFloat(p.getAttribute("lat")),
       parseFloat(p.getAttribute("lon")),
     ]);
-    const metaName = get(doc.getElementsByTagNameNS(NS, "metadata")[0], "name") ||
-      get(doc.getElementsByTagNameNS(NS, "rte")[0], "name");
-    const metaDesc = get(doc.getElementsByTagNameNS(NS, "metadata")[0], "desc");
+    const metaName = get(byTag("metadata")[0], "name") || get(byTag("rte")[0], "name") || get(byTag("trk")[0], "name");
+    const metaDesc = get(byTag("metadata")[0], "desc");
     return { name: metaName, desc: metaDesc, waypoints: wpts, track };
   }
 
@@ -41,7 +45,8 @@ const GPX = (() => {
     const la2 = (b[0] * Math.PI) / 180;
     const y = Math.sin(dLon) * Math.cos(la2);
     const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
-    return (Math.atan2(y, x) * 180) / Math.PI;
+    const deg = (Math.atan2(y, x) * 180) / Math.PI;
+    return (deg + 360) % 360;
   }
 
   function cumulative(track) {

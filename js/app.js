@@ -9,6 +9,7 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   const ROUTE_FILES = [
+    "noc_lotnisko_benitses.gpx",
     "dzien1_poludnie_pelekas.gpx",
     "dzien2_zachodnie_wybrzeze.gpx",
     "dzien3_afionas_drastis.gpx",

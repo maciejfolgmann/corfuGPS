@@ -1,4 +1,4 @@
-const VERSION = "corfu-gps-app-v6";
+const VERSION = "corfu-gps-app-v8";
 const TILE_CACHE = "corfu-gps-tiles";
 
 const APP_SHELL = [
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "icons/icon-192.png",
   "icons/icon-512.png",
   "icons/apple-touch-icon.png",
+  "routes/noc_lotnisko_benitses.gpx",
   "routes/dzien1_poludnie_pelekas.gpx",
   "routes/dzien2_zachodnie_wybrzeze.gpx",
   "routes/dzien3_afionas_drastis.gpx",

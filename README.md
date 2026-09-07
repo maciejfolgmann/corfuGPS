@@ -1,8 +1,9 @@
 # Korfu GPS — nawigacja offline na skuter
 
 Aplikacja webowa (PWA) do jazdy skuterem po Korfu. Działa w pełni offline po pobraniu mapy.
-Zawiera 6 gotowych tras (start z Benitses), punkty z opisami, prędkość,
-nagrywanie przejazdów i eksport GPX. Jest też trasa testowa po Olsztynie.
+Zawiera trasę nocną lotnisko CFU → Benitses (główna EO), 6 gotowych tras dziennych
+(start z Benitses), punkty z opisami, prędkość, nagrywanie przejazdów i eksport GPX.
+Jest też trasa testowa po Olsztynie.
 
 ## Jak zainstalować na iPhone (15 Pro / iOS 17+)
 
@@ -86,6 +87,6 @@ corfuGPS/
 │   ├── recording.js    # nagrywanie przejazdów
 │   └── compass.js      # kompas
 ├── leaflet/            # biblioteka map (lokalnie, offline)
-├── routes/*.gpx        # 6 tras Korfu + test Olsztyn
+├── routes/*.gpx        # noc CFU→Benitses + 6 tras Korfu + test Olsztyn
 └── icons/              # ikony apki
 ```
